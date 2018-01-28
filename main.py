@@ -1,10 +1,12 @@
-from listings import ListingManager
-from loader import *
-from price import ItemManager
 import asyncio
 import json
-from pytrade import login, client
 import logging
+
+from pytrade import login, client
+
+from listings import ListingManager
+from price import ItemManager
+from utils import check_banned
 
 # Declare global variables
 logging.basicConfig(format='[%(levelname)s]: %(message)s', level=logging.DEBUG)
@@ -26,31 +28,12 @@ except FileNotFoundError:
 logging.info('Reading secrets from file: guard.json')
 try:
     with open('guard.json') as file:
-        guard = json.load(file)
-        print("File not encrypted. Would you like to encrypt it?")
-        yn = input('[y/n]: ')
-        if yn[0].lower() == 'y':
-            print('Please enter a string of characters, must be 8 characters long\nYOU MUST REMEMBER THIS: WRITE IT DOWN')
-            key = input('[8 char long string]: ')
-            encrypt_file('guard.json', key)
-            print("File Encrypted!")
-            logging.debug(f"File guard.json encrypted with key: {key}")
-except (json.JSONDecodeError, UnicodeDecodeError):
-    print("File encrypted / json is invalid\nPlease enter your key (8 characters long)")
-    key = input('[8 char long string]: ')
-    steamguard = decrypt_file('guard.json', key)
-    logging.debug('guard.json file decrypted')
-    try:
-        steamguard = json.loads(steamguard)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        logging.warning('Invalid json saved in guard.json file, or key was invalid')
-        print(f"JSON is invalid, got {steamguard}")
-        input()
-        exit(1)
+        steamguard = json.load(file)
+        logging.info("Read guard.json file")
 except FileNotFoundError:
     logging.warning("Guard file not found, will ask for code")
 
-#Read input data for item prices and stock
+# Read input data for item prices and stock
 logging.info('Reading prices from file: prices.csv')
 try:
     with open('prices.csv') as prices:
@@ -60,10 +43,12 @@ except FileNotFoundError:
     input()
     exit(1)
 
-#Create client and manager
+# Create client and manager
 if steamguard:
-    steam_client = login.AsyncClient(settings['username'], settings['password'], shared_secret=steamguard['shared_secret'])
-    manager = client.TradeManager(settings['steamid'], settings['steam-apikey'], identity_secret=steamguard['identity_secret'])
+    steam_client = login.AsyncClient(settings['username'], settings['password'],
+                                     shared_secret=steamguard['shared_secret'])
+    manager = client.TradeManager(settings['steamid'], settings['steam-apikey'],
+                                  identity_secret=steamguard['identity_secret'])
 else:
     code = input("One Time Code: ")
     steam_client = login.AsyncClient(settings['username'], settings['password'], one_time_code=code)
@@ -72,6 +57,7 @@ else:
 bptf = ListingManager(manager, PriceHolder, settings['backpacktf-token'],
                       settings.get("description", "{name} for\n{ref} ref and {keys} keys"))
 
+
 @manager.on('logged_on')
 async def login():
     print('|+|+|+|+|+|+|+|+|+|+|+|+|+|+|+|+|+|')
@@ -79,34 +65,50 @@ async def login():
     print(f'|+| SteamID: {settings["steamid"][:21]}{" " * (19 - len(settings["steamid"]))}|+|')
     print('|+| Status: Logged in!          |+|')
     print('|+|+|+|+|+|+|+|+|+|+|+|+|+|+|+|+|+|')
-    PriceHolder.update_stock_inv(await manager.get_inventory(manager.steamid, 440))
+
+    try_again = False
+    inv = await manager.get_inventory(manager.steamid, 440)
+    if inv[0]:
+        PriceHolder.update_stock_inv(inv[1])
+    else:
+        logging.warning("Unable to get backpack, trying again.")
+        try_again = True
     if not PriceHolder.filter('Mann Co. Supply Crate Key'):
         logging.info("Mann Co. Supply Crate Key was not priced, getting value from bp.tf")
         await PriceHolder.update_key_price(settings['backpacktf-apikey'])
     print("Got key price!")
+    if try_again:
+        inv = await manager.get_inventory(manager.steamid, 440)
+        if inv[0]:
+            PriceHolder.update_stock_inv(inv[1])
+        else:
+            logging.fatal("Unable to get inventory: Attempting to continue.")
 
 
 @manager.on('new_trade')
 async def new_trade(trade):
     print(f"Trade Offer Received: {trade.tradeofferid} From {trade.steamid_other.toString()}")
     if PriceHolder.calculate_trade(trade):
-        steamid = trade.steamid_other.toString()
         print(f'[{trade.tradeofferid}]: Trade looks good, checking for scammer')
-        async with manager.session.get("https://backpack.tf/api/users/info/v1",
-                data={'key':settings['backpacktf-apikey'], 'steamids':steamid}) as resp:
-            resp_json = await resp.json()
-            if "bans" in resp_json['users'][steamid]:
-                if "steamrep_caution" in resp_json['users'][steamid]['bans'] or \
-                                "steamrep_scammer" in resp_json['users'][steamid]['bans'] or \
-                                            "all" in resp_json['users'][steamid]['bans']:
-                    print(f"WARNING: {steamid} is a scammer, declining")
-                    await trade.decline()
-                    return
+        steamid = trade.steamid_other.toString()
+        if check_banned(steamid, manager, settings['backpacktf-apikey']):
+            logging.info(f"{steamid} is a scammer, declining")
+            resp = await trade.decline()
+            if resp[0]:
+                return
+            else:
+                logging.warning(f"Failed to decline trade: {resp[1]}")
+                return
         print(f"[{trade.tradeofferid}]: Trade and Partner looks good! Accepting")
-        if not await trade.accept():
-            print("There was an error accepting")
+        resp = await trade.accept()
+        if not resp[0]:
+            logging.fatal("Failed to accept trade: {resp[1]}")
     else:
         print(f"[{trade.tradeofferid}]: This trade is bad, declining")
+        resp = await trade.decline()
+        if not resp[0]:
+            logging.warning(f"Failed to decline trade: {resp[1]}")
+
 
 @manager.on('trade_accepted')
 async def trade_passed(trade):
@@ -126,11 +128,17 @@ async def trade_passed(trade):
             bptf.make_sell_listing(item, item_data['price'])
     bptf.send_listings()
     bptf.remove_old()
-    # TODO test this function, and making listings
+
 
 @manager.on('error')
 async def exception(exc):
-    print(f"ERROR: ({exc.__name__}): {exc}")
+    logging.fatal(f"({exc.__name__}): {exc}")
+
+
+@manager.on('poll_error')
+async def poll_error(problem):
+    logging.error(f"There was an issue when polling: {problem}")
+
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(asyncio.ensure_future(manager.login(steam_client)))

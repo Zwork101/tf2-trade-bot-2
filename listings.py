@@ -1,5 +1,7 @@
-from loader import ListingResp, item_qualities
 import asyncio
+
+from utils import ListingResp, item_qualities
+
 
 class ListingManager:
 
@@ -13,9 +15,9 @@ class ListingManager:
 
     async def my_listings(self):
         async with self.manager.session.get("https://backpack.tf/api/classifieds/listings/v1",
-                                            params={'token':self.token, 'item_names':1}) as resp:
+                                            params={'token': self.token, 'item_names': 1}) as resp:
             listings = await resp.json()
-            if resp.status_code != 200:
+            if resp.status != 200:
                 print(f"ERROR: Unable to load new listings: {listings}")
                 return self.current_listings
             self.current_listings = listings['listings']
@@ -27,8 +29,8 @@ class ListingManager:
             keys += 1
             ref -= self.item_manager.currencies['Mann Co. Supply Crate Key']
         formatted_details = self.description.format(name=item.market_name, ref=ref, keys=keys)
-        payload = {'id':item.id, 'indent':1, 'currencies':{'metal':ref, 'keys':keys},
-                   'promoted':1, 'details':formatted_details, 'token':self.token}
+        payload = {'id': item.id, 'indent': 1, 'currencies': {'metal': ref, 'keys': keys},
+                   'promoted': 1, 'details': formatted_details, 'token': self.token}
         self.listing_queue.append(payload)
 
     def make_buy_listing(self, name, data):
@@ -41,15 +43,15 @@ class ListingManager:
         if 'Unusual' in name:
             name = name.replace('Unusual', data['effect'])
         qualities = ' '.join([str(item_qualities[q]) for q in name.split(' ') if q in item_qualities])
-        payload = {'intent':0, 'item':{'quality':qualities, 'item_name':name, 'craftable':data['craftable']},
-                   'promoted':1, 'details':formatted_details,'currencies':{'metal':ref,'keys':keys}}
+        payload = {'intent': 0, 'item': {'quality': qualities, 'item_name': name, 'craftable': data['craftable']},
+                   'promoted': 1, 'details': formatted_details, 'currencies': {'metal': ref, 'keys': keys}}
         self.listing_queue.append(payload)
 
     async def send_listings(self):
         async with self.manager.post("https://backpack.tf/api/classifieds/list/v1",
-                                     json={'token':self.token, 'listings':self.listing_queue}) as resp:
+                                     json={'token': self.token, 'listings': self.listing_queue}) as resp:
             data = await resp.json()
-            if resp.status_code != 200:
+            if resp.status != 200:
                 print(f'There was an issue creating the listings: {data["message"]}')
                 return
             for name, status in data['listings'].items():
@@ -62,7 +64,7 @@ class ListingManager:
         self.listing_queue.clear()
 
     async def remove_old(self):
-        payload = {'listings':[], 'token':self.token}
+        payload = {'listings': [], 'token': self.token}
         for name, item in self.item_manager.items.items():
             if (not (item['stock'] <= item['current_stock'] and item['intent'] == 0)) or \
                     (not (item['stock'] >= item['current_stock'] and item['intent'] == 1)):
@@ -74,8 +76,9 @@ class ListingManager:
                     payload['listings'].append(listing['id'])
                     break
         if payload['listings']:
-            async with self.manager.session.delete('https://backpack.tf/api/classifieds/delete/v1', json=payload) as resp:
-                if resp.status_code != 200:
+            async with self.manager.session.delete('https://backpack.tf/api/classifieds/delete/v1',
+                                                   json=payload) as resp:
+                if resp.status != 200:
                     txt = await resp.text()
                     print(f"Error Deleting listings: {txt}")
                 else:

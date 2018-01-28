@@ -1,9 +1,10 @@
-import aiohttp
 import csv
 
-class ItemManager:
+import aiohttp
 
-    currencies = {'Scrap Metal':.11, 'Reclaimed Metal':.33, 'Refined Metal':1.00}
+
+class ItemManager:
+    currencies = {'Scrap Metal': .11, 'Reclaimed Metal': .33, 'Refined Metal': 1.00}
 
     def __init__(self, price_file):
         self.price_file = price_file
@@ -16,15 +17,15 @@ class ItemManager:
         if fields:
             raise AttributeError("Not all fields required were found in file")
         for row in reader:
-            row = {key:value.strip() for key, value in row.items()}
+            row = {key: value.strip() for key, value in row.items()}
             if row['market_name'] not in self.items:
                 self.items[row['market_name']] = [
-                    {'price':float(row['price']), 'intent':int(row['intent']), 'current_stock':0,
-                     'stock':int(row['stock']), 'craftable':int(row['craftable']), 'effect':row['effect']}]
+                    {'price': float(row['price']), 'intent': int(row['intent']), 'current_stock': 0,
+                     'stock': int(row['stock']), 'craftable': int(row['craftable']), 'effect': row['effect']}]
             else:
                 self.items[row['market_name']].append(
-                    {'price':float(row['price']), 'intent':int(row['intent']), 'current_stock':0,
-                     'stock':int(row['stock']), 'craftable':int(row['craftable']), 'effect':row['effect']})
+                    {'price': float(row['price']), 'intent': int(row['intent']), 'current_stock': 0,
+                     'stock': int(row['stock']), 'craftable': int(row['craftable']), 'effect': row['effect']})
 
     def update_stock_trade(self, trade):
         for item in trade.items_to_give:
@@ -51,7 +52,7 @@ class ItemManager:
                 if craftable == inst['craftable'] and effect == inst['effect']:
                     self.items[item.market_name][i]['current_stock'] += 1
 
-    def filter(self, item_name, intent: int=None, craftable: int=None, effect: str=None):
+    def filter(self, item_name, intent: int = None, craftable: int = None, effect: str = None):
         """
         Filter through the items, to file the one (or multiple) requested
         :param item_name:
@@ -62,29 +63,29 @@ class ItemManager:
         """
         selected = []
         for item in self.items.get(item_name, []):
-            if not intent is None and intent != int(item['intent']):
+            if intent is not None and intent != int(item['intent']):
                 continue
-            if not craftable is None and craftable != item['craftable']:
+            if craftable is not None and craftable != item['craftable']:
                 continue
-            if not effect is None and effect != item['effect']:
+            if effect is not None and effect != item['effect']:
                 continue
             selected.append(item)
         return selected
 
-
     def calculate_trade(self, trade):
         """
         Check if a trade is in our interest
-        :param our_items:
-        :param their_items:
-        :return:
+        :param trade:
+        :return bool:
         """
 
         # Get the values of the items in the trade
         our_value = 0
         their_value = 0
-        if self.flow_stock(trade.items_to_receive, 0): return False
-        if self.flow_stock(trade.items_to_give, 1): return False
+        if self.flow_stock(trade.items_to_receive, 0):
+            return False
+        if self.flow_stock(trade.items_to_give, 1):
+            return False
 
         for item in trade.items_to_give:
             if item.market_name in ItemManager.currencies:
@@ -110,7 +111,7 @@ class ItemManager:
 
     @staticmethod
     def craftable_or_effect(item):
-        values = {'craftable':1, 'effect':'-'}
+        values = {'craftable': 1, 'effect': '-'}
         if 'Unusual' in item.market_name:
             for desc in item.descriptions:
                 if desc['value'].startswith("★ Unusual Effect: "):
@@ -119,7 +120,6 @@ class ItemManager:
             if desc['value'] == "( Not Usable in Crafting )":
                 values['craftable'] = 0
         return values
-
 
     @staticmethod
     def add_ref(v1, v2):
@@ -142,7 +142,7 @@ class ItemManager:
     @staticmethod
     async def update_key_price(key):
         async with aiohttp.ClientSession() as session:
-            async with session.get('https://backpack.tf/api/IGetCurrencies/v1', params={'key':key}) as resp:
+            async with session.get('https://backpack.tf/api/IGetCurrencies/v1', params={'key': key}) as resp:
                 data = await resp.json()
                 data = data['response']
                 if data['success']:
@@ -171,5 +171,3 @@ class ItemManager:
             elif not intent and item_listing[0]['stock'] < item_listing[0]['current_stock'] + amount:
                 return True
         return False
-
-
