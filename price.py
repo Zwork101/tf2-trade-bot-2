@@ -122,22 +122,18 @@ class ItemManager:
         return values
 
     @staticmethod
-    def add_ref(v1, v2):
-        v1_rem, v2_rem = int(str(v1).split('.')[1]), int(str(v2).split('.')[1])
-        ref = int(v1) + int(v2)
-
-        v1_rec, v2_rec = v1_rem // 33, v2_rem // 33
-        v1_rem, v2_rem = v1_rem - v1_rec * 33, v2_rem - v2_rec * 33
-
-        srp_added = v1_rem + v2_rem
-        v1_rec += srp_added // 33
-        srp_added -= (srp_added // 33) * 33
-
-        rec_added = v1_rec + v2_rec
-        ref += rec_added // 3
-        rec_added -= (rec_added // 3) * 3
-
-        return float(str(ref) + '.' + str(rec_added * 33 + srp_added))
+    def add_ref(num1, num2):
+        num1, num2 = float(num1), float(num2)
+        integer = int(num1) + int(num2)
+        num1 = int(("%.2f" % (num1 - int(num1)))[len("%.2f" % (num1 - int(num1))) - 2:])
+        num2 = int(("%.2f" % (num2 - int(num2)))[len("%.2f" % (num2 - int(num2))) - 2:])
+        while num2:
+            num2 -= 11
+            if num1 == 88:
+                integer += 1
+                num1 = 0
+            num1 += 11
+        return float("{}.{}".format(integer, num1))
 
     @staticmethod
     async def update_key_price(key):

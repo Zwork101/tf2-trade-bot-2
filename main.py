@@ -91,7 +91,7 @@ async def new_trade(trade):
     if PriceHolder.calculate_trade(trade):
         print(f'[{trade.tradeofferid}]: Trade looks good, checking for scammer')
         steamid = trade.steamid_other.toString()
-        if check_banned(steamid, manager, settings['backpacktf-apikey']):
+        if await check_banned(steamid, manager, settings['backpacktf-apikey']):
             logging.info(f"{steamid} is a scammer, declining")
             resp = await trade.decline()
             if resp[0]:
@@ -138,6 +138,8 @@ async def exception(exc):
 @manager.on('poll_error')
 async def poll_error(problem):
     logging.error(f"There was an issue when polling: {problem}")
+    loop.run_until_complete(asyncio.ensure_future(manager.login(steam_client)))
+    manager.run_forever()
 
 
 loop = asyncio.get_event_loop()
