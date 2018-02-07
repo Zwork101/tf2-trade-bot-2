@@ -103,7 +103,8 @@ class ItemManager:
                 continue
             item_stats = self.craftable_or_effect(item)
             item_resp = self.filter(item.market_name, 0, item_stats['craftable'], item_stats['effect'])
-            their_value = self.add_ref(float(their_value), item_resp[0]['price'])
+            if item_resp:
+                their_value = self.add_ref(float(their_value), item_resp[0]['price'])
 
         if our_value <= their_value:
             return True
@@ -156,12 +157,13 @@ class ItemManager:
             item_inst += f'_{item.market_name}'
             if item_inst in item_instance:
                 item_instance[item_inst] += 1
-                continue
-            item_instance[item_inst] = 1
+            else:
+                item_instance[item_inst] = 1
         for inst, amount in item_instance.items():
             crafts, effect, name = inst.split('_')
             item_listing = self.filter(name, intent, int(crafts), effect)
-            if not item_listing: continue
+            if not item_listing:
+                continue
             if intent and item_listing[0]['stock'] > item_listing[0]['current_stock'] - amount:
                 return True
             elif not intent and item_listing[0]['stock'] < item_listing[0]['current_stock'] + amount:
