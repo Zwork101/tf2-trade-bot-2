@@ -17,6 +17,7 @@ class ItemManager:
         if fields:
             raise AttributeError("Not all fields required were found in file")
         for row in reader:
+            print(row)
             row = {key: value.strip() for key, value in row.items()}
             if row['market_name'] not in self.items:
                 self.items[row['market_name']] = [

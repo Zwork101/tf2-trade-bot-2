@@ -1,5 +1,7 @@
 import enum
 
+import aiohttp
+
 
 class ListingResp(enum.Enum):
     OK = 0
@@ -42,3 +44,12 @@ item_qualities = {
     "Collector's": 14,
     "Decorated Weapon": 15
 }
+
+
+async def heartbeat(token):
+    async with aiohttp.ClientSession() as sess:
+        resp = await sess.post(
+            "https://backpack.tf/api/aux/heartbeat/v1",
+            data={"token": token, "automatic": "all"}
+        )
+        return await resp.json()

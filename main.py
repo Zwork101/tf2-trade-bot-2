@@ -1,18 +1,20 @@
 import asyncio
 import json
 import logging
+import time
 
 from pytrade import login, client
 
 from listings import ListingManager
 from price import ItemManager
-from utils import check_banned
+from utils import check_banned, heartbeat
 
 # Declare global variables
 logging.basicConfig(format='[%(levelname)s]: %(message)s', level=logging.DEBUG)
 settings = {}
 steamguard = {}
 PriceHolder = None
+start_time = 0
 
 # Load the settings from file
 logging.info('Fetching for settings in file: settings.json')
@@ -140,6 +142,18 @@ async def poll_error(problem):
     logging.error(f"There was an issue when polling: {problem}")
     loop.run_until_complete(asyncio.ensure_future(manager.login(steam_client)))
     manager.run_forever()
+
+
+@manager.on('start_poll')
+async def on_poll():
+    global start_time
+    if not start_time or int(time.time() - start_time) >= 90:
+        start_time = time.time()
+        resp = await heartbeat(bptf.token)
+        if 'error' in resp:
+            logging.warning("Issue for heartbeat: {}".format(resp['message']))
+        else:
+            logging.info("Heartbeat sent.")
 
 
 loop = asyncio.get_event_loop()
