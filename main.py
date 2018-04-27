@@ -3,7 +3,7 @@ import json
 import logging
 import time
 
-from pytrade import login, client
+import pytrade
 
 from listings import ListingManager
 from price import ItemManager
@@ -47,14 +47,16 @@ except FileNotFoundError:
 
 # Create client and manager
 if steamguard:
-    steam_client = login.AsyncClient(settings['username'], settings['password'],
+    steam_client = pytrade.login.AsyncClient(settings['username'], settings['password'],
                                      shared_secret=steamguard['shared_secret'])
-    manager = client.TradeManager(settings['steamid'], settings['steam-apikey'],
+    manager = pytrade.manager_trade.TradeManager(settings['steamid'], settings['steam-apikey'],
                                   identity_secret=steamguard['identity_secret'])
 else:
     code = input("One Time Code: ")
-    steam_client = login.AsyncClient(settings['username'], settings['password'], one_time_code=code)
-    manager = client.TradeManager(settings['steamid'], settings['steam-apikey'])
+    steam_client = pytrade.login.AsyncClient(settings['username'], settings['password'], one_time_code=code)
+    manager = pytrade.manager_trade.TradeManager(settings['steamid'], settings['steam-apikey'])
+
+global_manager = pytrade.GlobalManager([manager])
 
 bptf = ListingManager(manager, PriceHolder, settings['backpacktf-token'],
                       settings.get("description", "{name} for\n{ref} ref and {keys} keys"))
@@ -158,4 +160,4 @@ async def on_poll():
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(asyncio.ensure_future(manager.login(steam_client)))
-manager.run_forever()
+global_manager.run_forever()
